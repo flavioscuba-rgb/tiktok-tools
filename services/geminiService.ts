@@ -9,10 +9,9 @@ const getAiClient = () => {
   return new GoogleGenAI({ apiKey });
 };
 
+// Mantido para upload manual de arquivos (futuro uso)
 export const transcribeVideo = async (fileData: FileData): Promise<string> => {
   const ai = getAiClient();
-  
-  // Gemini 2.5 Flash is efficient for multimodal tasks
   const model = 'gemini-2.5-flash';
 
   try {
@@ -45,72 +44,31 @@ export const transcribeVideo = async (fileData: FileData): Promise<string> => {
 };
 
 export const transcribeVideoUrl = async (videoUrl: string): Promise<string> => {
-  // Client-side helper to fetch video bytes from a public TikTok resolver API.
-  // Note: This relies on the availability and CORS headers of the third-party API (TikWM).
+  // Alteração: Agora chamamos a API Route da Vercel (/api/transcribe)
+  // Isso resolve o problema de CORS que bloqueava o download do vídeo no navegador.
+  
   try {
-    // 1. Resolve the TikTok URL to a direct video link
-    const resolverApi = `https://www.tikwm.com/api/?url=${encodeURIComponent(videoUrl)}`;
-    const resolverResponse = await fetch(resolverApi);
-    const resolverData = await resolverResponse.json();
-
-    if (resolverData.code !== 0 || !resolverData.data?.play) {
-      throw new Error("Could not resolve video URL.");
-    }
-
-    const directVideoUrl = resolverData.data.play;
-
-    // 2. Fetch the video blob
-    // We attempt to fetch the video. If the CDN does not allow CORS, this will fail.
-    const videoResponse = await fetch(directVideoUrl);
-    if (!videoResponse.ok) throw new Error("Failed to download video data.");
-    const blob = await videoResponse.blob();
-
-    // 3. Convert to Base64
-    const base64Data = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        // Remove data:video/mp4;base64, prefix
-        resolve(result.split(',')[1]);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-
-    // 4. Send to Gemini
-    const ai = getAiClient();
-    const model = 'gemini-2.5-flash';
-
-    const response = await ai.models.generateContent({
-      model: model,
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType: 'video/mp4',
-              data: base64Data,
-            },
-          },
-          {
-            text: "Transcribe the spoken audio in this video exactly as it is spoken in its original language. Do not add any commentary, timestamps, or descriptions. Just provide the raw transcript.",
-          },
-        ],
+    const response = await fetch('/api/transcribe', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ url: videoUrl }),
     });
 
-    const text = response.text;
-    if (!text) {
-      throw new Error("No transcription generated.");
+    const data = await response.json();
+
+    if (!response.ok) {
+      // Tenta pegar a mensagem de erro específica da API
+      throw new Error(data.error || "Erro desconhecido no servidor.");
     }
-    return text;
+
+    return data.text;
 
   } catch (error: any) {
-    console.error("Direct URL transcription error:", error);
-    throw new Error(
-      error.message?.includes("Failed to fetch") 
-      ? "Não foi possível baixar o vídeo automaticamente devido a restrições do navegador (CORS). O serviço de terceiros pode estar indisponível."
-      : "Falha na transcrição automática."
-    );
+    console.error("Service Error:", error);
+    // Mensagem amigável para o usuário
+    throw new Error(error.message || "Falha na transcrição automática.");
   }
 };
 
