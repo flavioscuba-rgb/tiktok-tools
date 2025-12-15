@@ -1,0 +1,5 @@
+{
+  "name": "TikTok Transcriber & Translator",
+  "description": "A three-stage tool to clean TikTok URLs, transcribe video audio using Gemini AI, and translate content to Portuguese.",
+  "requestFramePermissions": []
+}
